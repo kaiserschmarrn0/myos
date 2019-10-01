@@ -5,38 +5,37 @@ import core.atomic : atomicOp, atomicLoad, atomicStore;
 import jank;
 import io;
 
+enum uint max_spins = 0x4000000;
+enum uint backoff_min = 1;
+
+alias ticket = ubyte;
+
 struct lock {
-    enum uint max_spins = 0x4000000;
-    enum uint backoff_min = 1;
-
-    alias ticket = ubyte;
-
     shared ticket cur = 0;
     shared ticket next = 0;
+}
 
-    shared void acquire() {
-        ticket t = atomicOp!"+="(next, 1);
+void acquire(shared lock *l) {
+    ticket t = atomicOp!"+="(l.next, 1);
+    t--;
 
-        for(int i = 0; i < max_spins; i++) {
-            if (atomicLoad(cur) != t) {
-                return;
-            }
-
-            size_t len = t - cur;
-            size_t j = backoff_min * len;
-            for (; j > 0 && i < max_spins; j--, i++) {
-                asm {
-                    rep;
-                    nop;
-                }
-            }
+    while(true) {
+        ticket c = atomicLoad(l.cur);
+        if (c == t) {
+            return;
         }
 
-        panic("possible deadlock after %u spins.\n", max_spins);
+        const size_t len = backoff_min * (t - c);
+        for (size_t j = 0; j < len; j++) {
+            asm {
+                rep;
+                nop;
+            }
+        }
     }
+}
 
-    shared void release() {
-        ubyte next = cast(ubyte)(atomicLoad(cur) + 1);
-        atomicStore(cur, next);
-    }
+void release(shared lock *l) {
+    ticket next = cast(ticket)(atomicLoad(l.cur) + 1);
+    atomicStore(l.cur, next);
 }

@@ -26,7 +26,7 @@ void qemu_putc(char c) {
 }
 
 void putc(char c) {
-    putc_lock.acquire();
+    acquire(&putc_lock);
 
     static if (1) {
         qemu_putc(c);
@@ -34,26 +34,22 @@ void putc(char c) {
 
     //actual putc
 
-    putc_lock.release();
+    release(&putc_lock);
 }
 
 void puts(cstr str) {
-    puts_lock.acquire();
+    acquire(&puts_lock);
 
     for (int i = 0; str[i]; i++) {
         putc(str[i]);
     }
 
-    puts_lock.release();
+    release(&puts_lock);
 }
 
 void print_ulong(ulong x) {
     int i;
-    puts("retard 1");
-    
     char[21] buf;
-
-    puts("retard 2");
 
     buf[20] = 0;
 
@@ -72,8 +68,6 @@ void print_ulong(ulong x) {
 }
 
 void print_hex(ulong x) {
-
-
     int i;
     char[17] buf;
 
@@ -95,7 +89,7 @@ void print_hex(ulong x) {
 }
 
 extern(C) void vprintf(cstr fmt, va_list args) {
-    vprintf_lock.acquire();
+    acquire(&vprintf_lock);
 
     for (int i = 0; fmt[i]; i++) {
         if (fmt[i] != '%') {
@@ -113,7 +107,7 @@ extern(C) void vprintf(cstr fmt, va_list args) {
                 case 'x':
                     ulong h;
                     va_arg(args, h);
-                    //print_hex(h);
+                    print_hex(h);
                     break;
                 case 'u':
                     ulong u;
@@ -126,7 +120,7 @@ extern(C) void vprintf(cstr fmt, va_list args) {
         }
     }
 
-    vprintf_lock.release();
+    release(&vprintf_lock);
 }
 
 extern(C) void printf(cstr fmt, ...) {

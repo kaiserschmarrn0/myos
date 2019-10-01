@@ -6,7 +6,7 @@ extern(C):
 @system:
 
 void __assert(const(char)* exp, const(char)* file, uint line) {
-    panic("assertion failed: %s: %u: %s", file, 0, exp);
+    panic("assertion failed: %s: %u: %s", file, line, exp);
 }
 
 /*void _d_array_slice_copy(void* dst, size_t dstlen, void* src, size_t srclen, size_t elemsz) {
