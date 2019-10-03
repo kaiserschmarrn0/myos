@@ -8,19 +8,17 @@ import io;
 enum uint max_spins = 0x4000000;
 enum uint backoff_min = 1;
 
-alias ticket = ubyte;
-
 struct lock {
-    shared ticket cur = 0;
-    shared ticket next = 0;
+    shared ubyte cur = 0;
+    shared ubyte next = 0;
 }
 
 void acquire(shared lock *l) {
-    ticket t = atomicOp!"+="(l.next, 1);
+    ubyte t = atomicOp!"+="(l.next, 1);
     t--;
 
     while(true) {
-        ticket c = atomicLoad(l.cur);
+        ubyte c = atomicLoad(l.cur);
         if (c == t) {
             return;
         }
@@ -36,6 +34,6 @@ void acquire(shared lock *l) {
 }
 
 void release(shared lock *l) {
-    ticket next = cast(ticket)(atomicLoad(l.cur) + 1);
+    ubyte next = cast(ubyte)(atomicLoad(l.cur) + 1);
     atomicStore(l.cur, next);
 }

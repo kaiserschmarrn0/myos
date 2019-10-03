@@ -5,8 +5,6 @@ import core.stdc.stdarg;
 import jank;
 import lock;
 
-alias cstr = immutable(char)*;
-
 immutable(char[]) hex_table = "0123456789ABCDEF";
 
 shared lock putc_lock;
@@ -25,38 +23,44 @@ void qemu_putc(char c) {
     outb(0xE9, c);
 }
 
-void putc(char c) {
-    acquire(&putc_lock);
-
+void async_putc(char c) {
     static if (1) {
         qemu_putc(c);
     }
 
     //actual putc
+}
 
+void putc(char c) {
+    acquire(&putc_lock);
+    async_putc(c);
     release(&putc_lock);
 }
 
-void puts(cstr str) {
+void async_puts(immutable(char)* str) {
+    for (int i = 0; str[i]; i++) {
+        async_putc(str[i]);
+    }
+}
+
+void puts(immutable(char)* str) {
     acquire(&puts_lock);
 
-    for (int i = 0; str[i]; i++) {
-        putc(str[i]);
-    }
+    async_puts(str);
 
     release(&puts_lock);
 }
 
 void print_ulong(ulong x) {
+    if (!x) {
+        async_putc('0');
+        return;
+    }
+
     int i;
     char[21] buf;
 
     buf[20] = 0;
-
-    if (!x) {
-        putc('0');
-        return;
-    }
 
     for (i = 19; x; i--) {
         buf[i] = hex_table[x % 10];
@@ -64,19 +68,19 @@ void print_ulong(ulong x) {
     }
 
     i++;
-    puts(cast(immutable)&buf[i]);
+    async_puts(cast(immutable)&buf[i]);
 }
 
 void print_hex(ulong x) {
+    if (!x) {
+        async_puts("0x0");
+        return;
+    }
+
     int i;
     char[17] buf;
 
     buf[16] = 0;
-
-    if (!x) {
-        puts("0x0");
-        return;
-    }
 
     for (i = 15; x; i--) {
         buf[i] = hex_table[x % 16];
@@ -84,25 +88,25 @@ void print_hex(ulong x) {
     }
 
     i++;
-    puts("0x");
-    puts(cast(immutable)&buf[i]);
+    async_puts("0x");
+    async_puts(cast(immutable)&buf[i]);
 }
 
-extern(C) void vprintf(cstr fmt, va_list args) {
+extern(C) void vprintf(immutable(char)* fmt, va_list args) {
     acquire(&vprintf_lock);
 
     for (int i = 0; fmt[i]; i++) {
         if (fmt[i] != '%') {
-            putc(fmt[i]);
+            async_putc(fmt[i]);
             continue;
         }
 
         if (fmt[++i]) {
             switch (fmt[i]) {
                 case 's':
-                    cstr str;
+                    immutable(char)* str;
                     va_arg(args, str);
-                    puts(str);
+                    async_puts(str);
                     break;
                 case 'x':
                     ulong h;
@@ -115,7 +119,7 @@ extern(C) void vprintf(cstr fmt, va_list args) {
                     print_ulong(u);
                     break;
                 default:
-                    putc('%');
+                    async_putc('%');
             }
         }
     }
@@ -123,17 +127,18 @@ extern(C) void vprintf(cstr fmt, va_list args) {
     release(&vprintf_lock);
 }
 
-extern(C) void printf(cstr fmt, ...) {
+extern(C) void printf(immutable(char)* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     vprintf(fmt, args);
 }
 
-extern(C) void panic(cstr fmt, ...) {
+extern(C) void panic(immutable(char)* fmt, ...) {
     va_list args;
     va_start(args, fmt);
     printf("panic: ");
     vprintf(fmt, args);
+    putc('\n');
 
     asm {
         cli;

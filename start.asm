@@ -1,4 +1,4 @@
-%define kernel_physical_offset 0xFFFFFFFFC0000000
+%include "constants.asm"
 
 [bits 32]
 
