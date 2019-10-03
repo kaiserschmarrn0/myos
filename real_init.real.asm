@@ -55,7 +55,6 @@ real_mode:
     xor ax, ax
     mov ds, ax
     mov es, ax
-    mov ss, ax
     mov fs, ax
     mov gs, ax
     mov ax, 0x1000
@@ -97,9 +96,9 @@ real_mode:
     mov ax, 0x10
     mov ds, ax
     mov es, ax
-    mov ss, ax
     mov fs, ax
     mov gs, ax
+    mov ss, ax
 
     ; lmode idt
     lidt [long_mode_idt]

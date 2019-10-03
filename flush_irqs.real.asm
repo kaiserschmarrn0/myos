@@ -10,7 +10,6 @@ out 0x21, al
 out 0xA1, al
 nop
 nop
-
 sti
 call await
 ret

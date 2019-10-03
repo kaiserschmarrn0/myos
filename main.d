@@ -14,11 +14,10 @@ shared(e820_entry)[256] e820_map;
 extern(C) void get_e820(shared(e820_entry)*);
 
 extern(C) void main() {
-    {
+
+    { // interrupts
         import interrupt;
 
-        //interrupts
-        
         asm {
             cli;
         }
@@ -51,10 +50,6 @@ extern(C) void main() {
             register_interrupt(i, &default_interrupt_handler, false);
         }
 
-        //exception_handler!(0, 0).handler();
-
-        //void function() t = &exception_handler!(0, 0).handler;
-
         register_interrupt(0x00, &exception_handler_maker!(0x00, 0).handler, false);
         register_interrupt(0x01, &exception_handler_maker!(0x01, 0).handler, false);
         register_interrupt(0x02, &exception_handler_maker!(0x02, 0).handler, false);
@@ -63,7 +58,7 @@ extern(C) void main() {
         register_interrupt(0x05, &exception_handler_maker!(0x05, 0).handler, false);
         register_interrupt(0x06, &exception_handler_maker!(0x06, 0).handler, false);
         register_interrupt(0x07, &exception_handler_maker!(0x07, 0).handler, false);
-        register_interrupt(0x08, &exception_handler_maker!(0x08, 0).handler, false);
+        register_interrupt(0x08, &exception_handler_maker!(0x08, 0).handler, true );
         register_interrupt(0x09, &exception_handler_maker!(0x09, 0).handler, false);
         register_interrupt(0x0A, &exception_handler_maker!(0x0A, 1).handler, false);
         register_interrupt(0x0B, &exception_handler_maker!(0x0B, 1).handler, false);
@@ -78,15 +73,35 @@ extern(C) void main() {
         register_interrupt(0x14, &exception_handler_maker!(0x14, 0).handler, false);
         // see above
         register_interrupt(0x1E, &exception_handler_maker!(0x1E, 0).handler, false);
-        // ...
-        //register_interrupt(0x20, &exception_handler_maker!(0x20, 0).handler, false);
         
+        // pit
+        register_interrupt(0x20, &pit_handler, false);
+
+        // ipis
+        register_interrupt(ipi.abort,      &abort_core,      true);
+        register_interrupt(ipi.resched,    &resched_core,    true);
+        register_interrupt(ipi.abort_exec, &abort_exec_core, true);
+
+        for (int i = 0; i < 16; i++) {
+            register_interrupt(0x90 + i, &apic_nmi_handler, true);
+        }
+
+        for (int i = 0; i < 8; i++) {
+            register_interrupt(0xA0 + i, &master_pic_handler, true);            
+        }
+
+        for (int i = 0; i < 8; i++) {
+            register_interrupt(0xA8 + i, &slave_pic_handler, true);            
+        }
+
+        register_interrupt(0xFF, &apic_spurious_handler, true);
+
         asm {
             lidt [ptr];
         }
 
         //doesn't work probably depends on other shit
-        //flush_irqs();
+        flush_irqs();
 
         exception_entry(0, true);
     }
