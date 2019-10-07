@@ -13,88 +13,6 @@ section .rodata
 no_cpuid_msg: db "no cpuid", 0
 no_long_mode_msg: db "no long mode", 0
 
-[bits 64]
-
-align 16
-gdt_pointer_lower_half:
-    dw gdt_pointer.end - gdt_pointer.start ; size
-    dd gdt_pointer.start - kernel_physical_offset ; start
-
-align 16
-gdt_pointer:
-    dw .start - .start - 1
-    dq .start
-
-align 16
-.start:
-.null_descriptor:
-    dw 0x0000
-    dw 0x0000
-    db 0x00
-    db 00000000b
-    db 00000000b
-    db 0x00
-
-.kernel_code_64:
-    dw 0x0000
-    dw 0x0000
-    db 0x00
-    db 10011010b
-    db 00100000b
-    db 0x00
-
-.kernel_data:
-    dw 0x0000
-    dw 0x0000
-    db 0x00
-    db 10010010b
-    db 00000000b
-    db 0x00
-
-.user_data_64:
-    dw 0x0000
-    dw 0x0000
-    db 0x00
-    db 11110010b
-    db 00000000b
-    db 0x00
-
-.user_code_64:
-    dw 0x0000
-    dw 0x0000
-    db 0x00
-    db 11110010b
-    db 00100000b
-    db 0x00
-
-.unreal_code:
-    dw 0xFFFF
-    dw 0x0000
-    db 0x00
-    db 10011010b
-    db 10001111b
-    db 0x00
-
-.tss:
-    dw 104
-.tss_low:
-    dw 0
-.tss_mid:
-    db 0
-.tss_flags1:
-    db 10001001b
-.tss_flags2:
-    db 00000000b
-.tss_high:
-    db 0
-.tss_upper32:
-    dd 0
-.tss_reserved:
-    dd 0
-.end:
-
-[bits 32]
-
 section .bss
 align 4096
 
@@ -138,6 +56,8 @@ early_error:
 
 global start:function (start.end - start)
 start:
+    extern gdt_pointer
+    extern gdt_pointer_lower_half
     extern main
 
     ; setup stack pointer
@@ -287,7 +207,7 @@ start:
 
     ; load gdt with 64 bit flags
     lgdt [gdt_pointer_lower_half - kernel_physical_offset]
-    jmp 0x08:.long_mode - kernel_physical_offset;
+    jmp 0x08:.long_mode - kernel_physical_offset
 
 .long_mode:
     [bits 64]

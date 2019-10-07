@@ -1,5 +1,3 @@
-module interrupt;
-
 import io;
 
 struct idt_desc {

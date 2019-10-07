@@ -14,6 +14,7 @@ struct lock {
 }
 
 void acquire(shared lock *l) {
+    // would be nice if we had fetch_add
     ubyte t = atomicOp!"+="(l.next, 1);
     t--;
 

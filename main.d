@@ -57,7 +57,7 @@ extern(C) void main() {
         }
 
         idt_ptr ptr = {
-            size: idt.sizeof,
+            size: idt.sizeof - 1,
             off: cast(ulong)&idt
         };
 
@@ -235,13 +235,14 @@ extern(C) void main() {
         }
 
         void* pmm_alloc_z(size_t page_count) {
-            ulong* ptr = cast(ulong*)(cast(ulong)pmm_alloc(page_count) + physical_memory_offset);
+            void* ret = pmm_alloc(page_count);
+            ulong* ptr = cast(ulong*)(cast(ulong)ret + physical_memory_offset);
                     
             foreach (size_t i; 0..bmp_realloc_step * page_size / uint.sizeof) {
                 ptr[i] = 0;
             }
 
-            return cast(void*)ptr;
+            return ret;
         }
 
         void pmm_free(void *bmp, size_t page_count) {
@@ -323,86 +324,6 @@ extern(C) void main() {
             }
         }
 
-        /*mem_bmp = &initial_bmp[0];
-        tmp_bmp = cast(uint*)pmm_alloc_z(bmp_realloc_step);
-
-        assert(tmp_bmp);
-
-        tmp_bmp = cast(uint*)(cast(ulong)tmp_bmp + physical_memory_offset);
-
-        foreach (size_t i; 0..bmp_realloc_step * page_size / uint.sizeof) {
-            tmp_bmp[i] = 0xFFFFFFFF;
-        }
-
-        mem_bmp = tmp_bmp;
-
-        bmp_len = ((page_size / uint.sizeof) * 32) * bmp_realloc_step;
-
-        // For each region specified by the e820, iterate over each page which
-        // fits in that region and if the region type indicates the area itself
-        // is usable, write that page as free in the bitmap. Otherwise, mark the
-        // page as used.
-        for (auto i = 0; e820_map[i].type; i++) {
-            size_t alignedBase;
-
-            if (e820_map[i].base % page_size) {
-                alignedBase = e820_map[i].base +
-                            (page_size - (e820_map[i].base % page_size));
-            } else alignedBase = e820_map[i].base;
-
-            size_t alignedLength = (e820_map[i].length / page_size) * page_size;
-
-            if ((e820_map[i].base % page_size) && alignedLength) {
-                alignedLength -= page_size;
-            }
-
-            for (auto j = 0; j * page_size < alignedLength; j++) {
-                size_t addr = alignedBase + j * page_size;
-
-                size_t page = addr / page_size;
-
-                if (addr < mem_base + page_size) {
-                    continue;
-                }
-
-                // Reallocate bitmap
-                if (addr >= (mem_base + bmp_len * page_size)) {
-                    size_t currentBitmapSizeInPages = ((bmp_len / 32) *
-                                                    uint.sizeof) / page_size;
-                    size_t newBitmapSizeInPages = currentBitmapSizeInPages +
-                                                bmp_realloc_step;
-                    tmp_bmp = cast(uint*)pmm_alloc_z(newBitmapSizeInPages);
-
-                    assert(tmp_bmp);
-
-                    tmp_bmp = cast(uint*)(cast(size_t)tmp_bmp +
-                                physical_memory_offset);
-
-                    // Copy over previous bitmap
-                    foreach (k;
-                            0..currentBitmapSizeInPages * page_size / uint.sizeof) {
-                        tmp_bmp[k] = mem_bmp[k];
-                    }
-
-                    // Fill in the rest
-                    for (auto k = (currentBitmapSizeInPages * page_size) /
-                        uint.sizeof;
-                        k < (newBitmapSizeInPages * page_size) / uint.sizeof; k++) {
-                        tmp_bmp[k] = 0xFFFFFFFF;
-                    }
-
-                    bmp_len += ((page_size / uint.sizeof) * 32) *
-                                    bmp_realloc_step;
-                    auto oldBitmap = cast(uint*)(cast(ulong)mem_bmp -
-                                    physical_memory_offset);
-                    mem_bmp = tmp_bmp;
-                    pmm_free(oldBitmap, currentBitmapSizeInPages);
-                }
-
-                unset_bit(page);
-            }
-        }*/
-        
         struct alloc_md {
             ulong pages;
             ulong size;
@@ -469,9 +390,6 @@ extern(C) void main() {
 
         bool map_page(shared pagemap* pm, size_t vaddr, size_t paddr, size_t flags) {
             acquire(&pm.l);
-            /*scope(exit) { thank you d
-                release(&pm.l);
-            }*/
 
             size_t pml4_entry = (vaddr & (cast(size_t)0x1FF << 39)) >> 39;
             size_t pdpt_entry = (vaddr & (cast(size_t)0x1FF << 30)) >> 30;
@@ -551,13 +469,49 @@ extern(C) void main() {
 
         // first 4 gigs
         foreach(size_t i; 0..0x2000000 / page_size) {
-            //ulong addr = i * page_size;
+            ulong addr = i * page_size;
 
-            //map_page(kernel_pagemap, addr, addr, 0x03);
-            //map_page(kernel_pagemap, addr + physical_memory_offset, addr, 0x03);
-            //map_page(kernel_pagemap, addr + kernel_physical_memory_offset, addr, 0x03);
+            map_page(kernel_pagemap, addr, addr, 0x03);
+            map_page(kernel_pagemap, addr + physical_memory_offset, addr, 0x03);
+            map_page(kernel_pagemap, addr + kernel_physical_memory_offset, addr, 0x03);
+        }
+
+        size_t new_cr3 = cast(size_t)kernel_pagemap.pml4 - physical_memory_offset;
+
+        asm {
+            mov RAX, new_cr3;
+            mov CR3, RAX;
+        }
+
+        foreach (ulong i; 0..0x100000000 / page_size) {
+            ulong addr = i * page_size;
+
+            map_page(kernel_pagemap, physical_memory_offset + addr, addr, 0x03);
+        }
+
+        for (ulong i = 0; e820_map[i].type; i++) {
+            size_t aligned_base = e820_map[i].base - (e820_map[i].base % page_size);
+            size_t aligned_length = (e820_map[i].length / page_size) * page_size;
+        
+            if (e820_map[i].length % page_size) {
+                aligned_length += page_size;
+            }
+
+            if (e820_map[i].base % page_size) {
+                aligned_length += page_size;
+            }
+
+            for (ulong j = 0; j * page_size < aligned_length; j++) {
+                ulong addr = aligned_base + j * page_size;
+
+                if (addr < 0x100000000) {
+                    continue;
+                }
+
+                map_page(kernel_pagemap, physical_memory_offset + addr, addr, 0x03);
+            }
         }
     }
 
-    assert(1 == 2);
+    panic("end of kernel.\n");
 }

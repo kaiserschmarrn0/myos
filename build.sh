@@ -14,6 +14,7 @@ elf() {
     ${AS} e820.real.asm ${REALFLAGS} -o e820.bin
     
     ${AS} start.asm ${ASFLAGS} -o start.o
+    ${AS} gdt.asm ${ASFLAGS} -o gdt.o
     ${AS} real.asm ${ASFLAGS} -o real.o
 
     DC="ldc2"
@@ -28,7 +29,7 @@ elf() {
     LD="ld.lld"
     LDFLAGS="-O2 -gc-sections --oformat elf_amd64 --Bstatic --nostdlib -T linker.ld"
 
-    ${LD} ${LDFLAGS} start.o real.o main.o io.o lock.o jank.o interrupt.o -o ${IMAGE}
+    ${LD} ${LDFLAGS} start.o gdt.o real.o main.o io.o lock.o jank.o interrupt.o -o ${IMAGE}
 }
 
 iso() {
